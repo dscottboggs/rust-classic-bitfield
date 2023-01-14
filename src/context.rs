@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use core::ops::Deref;
 
 use derive_deref::Deref;
 use quote::{format_ident, quote, ToTokens};
@@ -114,6 +114,23 @@ impl BitfieldEnumCtx {
             .collect()
     }
 
+    /// Adds `.with()` and `.without()` methods
+    pub(crate) fn with_and_without(&self) -> impl ToTokens {
+        quote! {
+            /// Combines this flag with `other`.
+            fn with(self, other: impl Into<Self>) -> Self
+            {
+                self | other.into()
+            }
+
+            /// Returns this value with `other` ensured to be unset.
+            fn without(self, other: impl Into<Self>) -> Self
+            {
+                self & (!(other.into()))
+            }
+        }
+    }
+
     /// Impls for From<repr_type>/Into<type_name> and vice-versa, Deref and
     /// DerefMut of the internal value.
     pub(crate) fn impl_from_and_deref(&self) -> impl ToTokens {
@@ -132,14 +149,14 @@ impl BitfieldEnumCtx {
                 }
             }
 
-            impl std::ops::Deref for #type_name {
+            impl core::ops::Deref for #type_name {
                 type Target = #repr_type;
                 fn deref(&self) -> &Self::Target {
                     &self.0
                 }
             }
 
-            impl std::ops::DerefMut for #type_name {
+            impl core::ops::DerefMut for #type_name {
                 fn deref_mut(&mut self) -> &mut Self::Target {
                     &mut self.0
                 }
@@ -152,21 +169,21 @@ impl BitfieldEnumCtx {
         let type_name = &self.ident;
         let repr_type = &*self.repr_type;
         quote! {
-            impl std::ops::BitAnd<#type_name> for #type_name {
+            impl core::ops::BitAnd<#type_name> for #type_name {
                 type Output = #type_name;
                 fn bitand(self, rhs: #type_name) -> Self::Output {
                     Self(self.0 & rhs.0)
                 }
             }
 
-            impl std::ops::BitAnd<#repr_type> for #type_name {
+            impl core::ops::BitAnd<#repr_type> for #type_name {
                 type Output = #type_name;
                 fn bitand(self, rhs: #repr_type) -> Self::Output {
                     Self(self.0 & rhs)
                 }
             }
 
-            impl std::ops::BitAnd<#type_name> for #repr_type {
+            impl core::ops::BitAnd<#type_name> for #repr_type {
                 type Output = #type_name;
                 fn bitand(self, rhs: #type_name) -> Self::Output {
                     #type_name(self & rhs.0)
@@ -180,21 +197,21 @@ impl BitfieldEnumCtx {
         let type_name = &self.ident;
         let repr_type = &*self.repr_type;
         quote! {
-            impl std::ops::BitOr<#type_name> for #repr_type {
+            impl core::ops::BitOr<#type_name> for #repr_type {
                 type Output = #type_name;
                 fn bitor(self, rhs: #type_name) -> Self::Output {
                     #type_name(self | rhs.0)
                 }
             }
 
-            impl std::ops::BitOr<#repr_type> for #type_name {
+            impl core::ops::BitOr<#repr_type> for #type_name {
                 type Output = #type_name;
                 fn bitor(self, rhs: #repr_type) -> Self::Output {
                     Self(self.0 | rhs)
                 }
             }
 
-            impl std::ops::BitOr<#type_name> for #type_name {
+            impl core::ops::BitOr<#type_name> for #type_name {
                 type Output = #type_name;
                 fn bitor(self, rhs: #type_name) -> Self::Output {
                     Self(self.0 | rhs.0)
@@ -206,10 +223,10 @@ impl BitfieldEnumCtx {
     pub(crate) fn impl_not(&self) -> impl ToTokens {
         let type_name = &self.ident;
         quote! {
-            impl Not for #type_name {
+            impl core::ops::Not for #type_name {
                 type Output = Self;
 
-                fn not(&self) -> Self::Output {
+                fn not(self) -> Self::Output {
                     Self(!self.0)
                 }
             }

@@ -52,4 +52,18 @@ mod tests {
             "TestEnum::ONE | TestEnum::TWO | TestEnum::THREE | TestEnum::ONE_AND_THREE"
         );
     }
+
+    #[test]
+    fn test_with_and_without() {
+        let subject = TestEnum::ONE.with(TestEnum::TWO);
+        assert_eq!(*subject, 3);
+        let subject = subject.without(1);
+        assert_eq!(*subject, 2);
+        let subject = TestEnum::TWO | TestEnum::THREE;
+        assert_eq!(*subject, 6);
+        let subject = subject.without(TestEnum::ONE_AND_THREE);
+        // note that removing ONE redundantly here is fine.
+        assert_eq!(*subject, 2);
+    }
+
 }

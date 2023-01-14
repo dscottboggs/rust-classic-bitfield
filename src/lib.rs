@@ -15,6 +15,7 @@ fn impl_bitfield_enum(ctx: BitfieldEnumCtx) -> TokenStream {
     };
     let constant_values = ctx.constant_values();
     let has_methods = ctx.has_methods();
+    let with_and_without = ctx.with_and_without();
     let impl_from_and_deref = ctx.impl_from_and_deref();
     let impl_bitand = ctx.impl_bitand();
     let impl_bitor = ctx.impl_bitor();
@@ -30,6 +31,8 @@ fn impl_bitfield_enum(ctx: BitfieldEnumCtx) -> TokenStream {
             #(#constant_values)*
 
             #(#has_methods)*
+
+            #with_and_without
         }
 
         #impl_from_and_deref
