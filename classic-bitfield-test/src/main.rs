@@ -66,4 +66,12 @@ mod tests {
         assert_eq!(*subject, 2);
     }
 
+    #[test]
+    fn test_assigns() {
+        let mut subject = TestEnum::ONE;
+        subject |= TestEnum::TWO;
+        assert_eq!(*subject, 3);
+        subject &= TestEnum::ONE_AND_THREE;
+        assert_eq!(*subject, 1);
+    }
 }

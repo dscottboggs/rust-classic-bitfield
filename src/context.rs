@@ -189,6 +189,18 @@ impl BitfieldEnumCtx {
                     #type_name(self & rhs.0)
                 }
             }
+
+            impl core::ops::BitAndAssign for #type_name {
+                fn bitand_assign(&mut self, rhs: Self) {
+                    self.0 &= rhs.0
+                }
+            }
+
+            impl core::ops::BitAndAssign<#repr_type> for #type_name {
+                fn bitand_assign(&mut self, rhs: #repr_type) {
+                    self.0 &= rhs;
+                }
+            }
         }
     }
 
@@ -215,6 +227,18 @@ impl BitfieldEnumCtx {
                 type Output = #type_name;
                 fn bitor(self, rhs: #type_name) -> Self::Output {
                     Self(self.0 | rhs.0)
+                }
+            }
+
+            impl core::ops::BitOrAssign for #type_name {
+                fn bitor_assign(&mut self, rhs: Self) {
+                    self.0 |= rhs.0
+                }
+            }
+
+            impl core::ops::BitOrAssign<#repr_type> for #type_name {
+                fn bitor_assign(&mut self, rhs: #repr_type) {
+                    self.0 |= rhs;
                 }
             }
         }
