@@ -36,6 +36,15 @@ pub(crate) enum TestEnum {
     #[repr(0b101)]
     ONE_AND_THREE,
 }
+
+fn main() {
+    let value = TestEnum::ONE | TestEnum::TWO;
+    assert!(value.has_one());
+    assert!(!value.has_one_and_three());
+    let value = value.without(TestEnum::ONE_AND_THREE);
+    assert!(!value.has_one());
+    assert!(value.has_two());
+}
 ```
 
 For more examples, take a look at [the tests](`classic-bitfield-test/src/main.rs`).

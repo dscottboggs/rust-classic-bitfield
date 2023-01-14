@@ -38,6 +38,7 @@ mod tests {
         assert!(subject.has_one());
         assert!(subject.has_two());
         assert_eq!(subject, 3);
+        assert!(!subject.has_one_and_three());
     }
 
     #[test]
