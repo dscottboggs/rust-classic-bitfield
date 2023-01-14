@@ -107,7 +107,7 @@ impl BitfieldEnumCtx {
                 quote! {
                     /// Check if this bitfield has the #variant_name flag set.
                     fn #fn_name(self) -> bool {
-                        (self & Self::#variant_name) != 0
+                        (self & Self::#variant_name) == Self::#variant_name
                     }
                 }
             })
