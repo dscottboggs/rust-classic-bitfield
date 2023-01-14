@@ -12,7 +12,7 @@ pub(crate) enum TestEnum {
     /// third opt
     THREE,
     /// COMBO
-    #[repr(5)]
+    #[repr(0b101)]
     ONE_AND_THREE,
 }
 

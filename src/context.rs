@@ -83,7 +83,7 @@ impl BitfieldEnumCtx {
                             }
                         })
                     })
-                    .unwrap_or_else(|| quote! { #i });
+                    .unwrap_or(quote! { #i });
                 let type_name = &self.ident;
                 quote! {
                     const #name: #type_name = #type_name(#repr);
