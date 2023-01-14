@@ -20,6 +20,7 @@ fn impl_bitfield_enum(ctx: BitfieldEnumCtx) -> TokenStream {
     let impl_bitor = ctx.impl_bitor();
     let impl_partial_eq_ord = ctx.impl_partial_eq_ord();
     let impl_debug = ctx.impl_debug();
+    let impl_not = ctx.impl_not();
 
     quote! {
         #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -36,6 +37,8 @@ fn impl_bitfield_enum(ctx: BitfieldEnumCtx) -> TokenStream {
         #impl_bitand
 
         #impl_bitor
+
+        #impl_not
 
         #impl_partial_eq_ord
 

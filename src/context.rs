@@ -116,7 +116,7 @@ impl BitfieldEnumCtx {
 
     /// Impls for From<repr_type>/Into<type_name> and vice-versa, Deref and
     /// DerefMut of the internal value.
-    pub(crate) fn impl_from_and_deref(&self) -> quote::__private::TokenStream {
+    pub(crate) fn impl_from_and_deref(&self) -> impl ToTokens {
         let type_name = &self.ident;
         let repr_type = &*self.repr_type;
         quote! {
@@ -148,7 +148,7 @@ impl BitfieldEnumCtx {
     }
 
     /// Impls for bitwise-and operations
-    pub(crate) fn impl_bitand(&self) -> quote::__private::TokenStream {
+    pub(crate) fn impl_bitand(&self) -> impl ToTokens {
         let type_name = &self.ident;
         let repr_type = &*self.repr_type;
         quote! {
@@ -176,7 +176,7 @@ impl BitfieldEnumCtx {
     }
 
     /// Impls for bitwise-or operations
-    pub(crate) fn impl_bitor(&self) -> quote::__private::TokenStream {
+    pub(crate) fn impl_bitor(&self) -> impl ToTokens {
         let type_name = &self.ident;
         let repr_type = &*self.repr_type;
         quote! {
@@ -203,7 +203,20 @@ impl BitfieldEnumCtx {
         }
     }
 
-    pub(crate) fn impl_partial_eq_ord(&self) -> quote::__private::TokenStream {
+    pub(crate) fn impl_not(&self) -> impl ToTokens {
+        let type_name = &self.ident;
+        quote! {
+            impl Not for #type_name {
+                type Output = Self;
+
+                fn not(&self) -> Self::Output {
+                    Self(!self.0)
+                }
+            }
+        }
+    }
+
+    pub(crate) fn impl_partial_eq_ord(&self) -> impl ToTokens {
         let type_name = &self.ident;
         let repr_type = &*self.repr_type;
 
@@ -222,7 +235,7 @@ impl BitfieldEnumCtx {
         }
     }
 
-    pub(crate) fn impl_debug(&self) -> quote::__private::TokenStream {
+    pub(crate) fn impl_debug(&self) -> impl ToTokens {
         let type_name = &self.ident;
         let check_each_variant = self.variants.iter().map(|variant| {
             let variant_name = &variant.ident;
