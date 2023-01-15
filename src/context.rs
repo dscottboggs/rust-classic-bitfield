@@ -338,9 +338,13 @@ impl BitfieldEnumCtx {
         }
     }
 
-    #[cfg(feature = "serde-as-number")]
+    #[cfg(feature = "serde")]
     pub(crate) fn impl_serde(&self) -> impl ToTokens {
+        use heck::ToSnakeCase;
+
+        let vis = &self.vis;
         let type_name = &self.ident;
+        let repr_type = &*self.repr_type;
         let serialize_method = Ident::new(
             &format!("serialize_{}", &self.repr_type.to_token_stream()),
             syn::__private::Span::call_site(),
@@ -353,46 +357,31 @@ impl BitfieldEnumCtx {
             &format!("visit_{}", self.repr_type.to_token_stream()),
             syn::__private::Span::call_site(),
         );
-        quote! {
-            impl serde::Serialize for #type_name {
-                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-                where
-                    S: serde::Serializer,
-                {
-                    serializer.#serialize_method(self.0)
-                }
-            }
-
-            impl<'de> serde::Deserialize<'de> for #type_name {
-                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-                where
-                    D: serde::Deserializer<'de>,
-                {
-                    struct MyVisitor;
-
-                    impl<'v> serde::de::Visitor<'v> for MyVisitor {
-                        type Value = #type_name;
-                        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                            write!(formatter, "integer")
-                        }
-
-                        fn #visit_method<E>(self, v: u64) -> Result<Self::Value, E>
-                        where
-                            E: serde::de::Error,
-                        {
-                            Ok(#type_name(v))
-                        }
+        let maybe_convertible_types = self.maybe_convertible_types();
+        let (signed_conversion_visit_method, signed_conversion_type): (Vec<_>, Vec<_>) =
+            maybe_convertible_types
+                .iter()
+                .filter_map(|t| {
+                    let stringified = t.to_token_stream().to_string();
+                    if stringified.starts_with('i') {
+                        Some((format_ident!("visit_{}", stringified), t))
+                    } else {
+                        None
                     }
-
-                    deserializer.#deserialize_method(MyVisitor)
-                }
-            }
-        }
-    }
-
-    #[cfg(feature = "serde-as-names")]
-    pub(crate) fn impl_serde(&self) -> impl ToTokens {
-        let type_name = &self.ident;
+                })
+                .unzip();
+        let (unsigned_conversion_visit_method, unsigned_conversion_type): (Vec<_>, Vec<_>) =
+            maybe_convertible_types
+                .iter()
+                .filter_map(|t| {
+                    let stringified = t.to_token_stream().to_string();
+                    if stringified.starts_with('u') {
+                        Some((format_ident!("visit_{}", stringified), t))
+                    } else {
+                        None
+                    }
+                })
+                .unzip();
         let (variant, has_method): &(Vec<_>, Vec<_>) = &self
             .variants
             .iter()
@@ -402,66 +391,182 @@ impl BitfieldEnumCtx {
                 (name, has_method)
             })
             .unzip();
-        let (key, value) = self.name_value_pairs();
-        quote! {
-            impl serde::Serialize for #type_name {
-                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-                where
-                    S: serde::Serializer,
-                {
-                    use serde::ser::SerializeSeq;
-
-                    let mut seq = serializer.serialize_seq(None)?;
-                    #(
-                        if self.#has_method() {
-                            seq.serialize_element(#variant)?;
-                        }
-                    )*
-                    seq.end()
-                }
-            }
-
-            impl<'de> serde::Deserialize<'de> for #type_name {
-                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-                where
-                    D: serde::Deserializer<'de>,
-                {
-                    struct MyVisitor;
-
-                    impl<'v> serde::de::Visitor<'v> for MyVisitor {
-                        type Value = #type_name;
-                        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                            write!(formatter, "a list of any of these values: {:?}", #type_name::variant_names())
-                        }
-
-                        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-                        where
-                            A: serde::de::SeqAccess<'v>,
-                        {
-                            let mut value = #type_name(0);
-
-                            while let Some(member) = seq.next_element()? {
-                                match member {
-                                    #(#key => value |= #type_name::#value),*,
-                                    unrecognized => {
-                                        return Err(de::Error::unknown_variant(
-                                            unrecognized,
-                                            #type_name::variant_names(),
-                                        ));
-                                    }
-                                }
-                            }
-
-                            Ok(value)
+        let bigint_conversion = {
+            let repr_type_string = self.repr_type.to_token_stream().to_string();
+            let mut out = vec![];
+            if repr_type_string != "u128" {
+                out.push(quote! {
+                    fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error
+                    {
+                        match #repr_type::try_from(v) {
+                            Ok(v) => self.#visit_method(v),
+                            Err(err) => Err(serde::de::Error::invalid_value(Unexpected::Other(&v.to_string()), &self))
                         }
                     }
+                });
+            }
+            if repr_type_string != "i128" {
+                out.push(quote! {
+                    fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error
+                    {
+                        match #repr_type::try_from(v) {
+                            Ok(v) => self.#visit_method(v),
+                            Err(err) => Err(serde::de::Error::invalid_value(Unexpected::Other(&v.to_string()), &self))
+                        }
+                    }
+                })
+            }
+            out
+        };
+        let (key, value) = self.name_value_pairs();
+        let mod_name = Ident::new(
+            &format!("{}_serde", type_name.to_string().to_snake_case()),
+            type_name.span(),
+        );
+        quote! {
+            #vis mod #mod_name {
+                #vis mod numeric_representation {
+                    use super::super::#type_name;
 
-                    deserializer.deserialize_seq(MyVisitor)
+                    #vis fn serialize<S>(value: &#type_name, serializer: S) -> Result<S::Ok, S::Error>
+                    where
+                        S: serde::Serializer,
+                    {
+                        serializer.#serialize_method(value.0)
+                    }
+
+                    #vis fn deserialize<'de, D>(deserializer: D) -> Result<#type_name, D::Error>
+                    where
+                        D: serde::Deserializer<'de>,
+                    {
+                        use serde::de::Unexpected;
+                        struct MyVisitor;
+
+                        impl<'v> serde::de::Visitor<'v> for MyVisitor {
+                            type Value = #type_name;
+                            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                                write!(formatter, "integer between {} and {}", #repr_type::MIN, #repr_type::MAX)
+                            }
+
+                            fn #visit_method<E>(self, v: #repr_type) -> Result<Self::Value, E>
+                            where
+                                E: serde::de::Error,
+                            {
+                                Ok(#type_name(v))
+                            }
+
+                            #(
+                                fn #signed_conversion_visit_method<E>(self, v: #signed_conversion_type) -> Result<Self::Value, E>
+                                where
+                                    E: serde::de::Error
+                                {
+                                    match #repr_type::try_from(v) {
+                                        Ok(v) => self.#visit_method(v),
+                                        Err(_) => Err(serde::de::Error::invalid_value(Unexpected::Signed(v.into()), &self))
+                                    }
+                                }
+                            )*
+                            #(
+                                fn #unsigned_conversion_visit_method<E>(self, v: #unsigned_conversion_type) -> Result<Self::Value, E>
+                                where
+                                    E: serde::de::Error
+                                {
+                                    match #repr_type::try_from(v) {
+                                        Ok(v) => self.#visit_method(v),
+                                        Err(_) => Err(serde::de::Error::invalid_value(Unexpected::Unsigned(v.into()), &self))
+                                    }
+                                }
+                            )*
+                            #(#bigint_conversion)*
+                        }
+
+                        deserializer.#deserialize_method(MyVisitor)
+                    }
+                }
+
+                #vis mod names {
+                    use super::super::#type_name;
+
+                    #vis fn serialize<S>(value: &#type_name, serializer: S) -> Result<S::Ok, S::Error>
+                    where
+                        S: serde::Serializer,
+                    {
+                        use serde::ser::SerializeSeq;
+
+                        let mut seq = serializer.serialize_seq(None)?;
+                        #(
+                            if value.#has_method() {
+                                seq.serialize_element(#variant)?;
+                            }
+                        )*
+                        seq.end()
+                    }
+
+                    #vis fn deserialize<'de, D>(deserializer: D) -> Result<#type_name, D::Error>
+                    where
+                        D: serde::Deserializer<'de>,
+                    {
+                        struct MyVisitor;
+
+                        impl<'v> serde::de::Visitor<'v> for MyVisitor {
+                            type Value = #type_name;
+                            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                                write!(formatter, "a list of any of these values: {:?}", #type_name::variant_names())
+                            }
+
+                            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+                            where
+                                A: serde::de::SeqAccess<'v>,
+                            {
+                                let mut value = #type_name(0);
+
+                                while let Some(member) = seq.next_element()? {
+                                    match member {
+                                        #(#key => value |= #type_name::#value),*,
+                                        unrecognized => {
+                                            return Err(serde::de::Error::unknown_variant(
+                                                unrecognized,
+                                                #type_name::variant_names(),
+                                            ));
+                                        }
+                                    }
+                                }
+
+                                Ok(value)
+                            }
+                        }
+
+                        deserializer.deserialize_seq(MyVisitor)
+                    }
                 }
             }
         }
     }
-    #[cfg(not(any(feature = "serde-as-number", feature = "serde-as-names")))]
+
+    /// All of the integer types except the one representing the output
+    /// bitfield, for trying to convert.
+    #[cfg(feature = "serde")]
+    fn maybe_convertible_types(&self) -> Vec<impl ToTokens> {
+        let mut out = vec![];
+        let repr_type = &self.repr_type;
+        let repr_type_name = repr_type.to_token_stream().to_string();
+        for signedness in ['u', 'i'] {
+            for size in (3..7).map(|i| 1 << i) {
+                let name = format!("{signedness}{size}");
+                if name != repr_type_name {
+                    let ident = Ident::new(&name, repr_type.span());
+                    out.push(ident);
+                }
+            }
+        }
+        out
+    }
+
+    #[cfg(not(feature = "serde"))]
     pub(crate) fn impl_serde(&self) -> impl ToTokens {
         quote! {}
     }

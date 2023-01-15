@@ -1,7 +1,5 @@
 use std::{convert::Infallible, io, os::unix::process::CommandExt, process::Command};
 
-use serde::de;
-
 #[macro_use]
 extern crate classic_bitfield;
 
@@ -24,6 +22,8 @@ fn main() -> io::Result<Infallible> {
 
 #[cfg(test)]
 mod tests {
+    use serde::{Deserialize, Serialize};
+
     use super::*;
 
     #[test]
@@ -79,33 +79,41 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "serde-as-number")]
-    fn test_serialize() {
-        let subject = TestEnum::ONE_AND_THREE;
-        assert_eq!(serde_json::to_string(&subject).expect("serialize"), "5");
-    }
-    #[test]
-    #[cfg(feature = "serde-as-number")]
-    fn test_deserialize() {
-        let subject: TestEnum = serde_json::from_str("5").expect("deserialize");
-        assert!(subject.has_one_and_three());
-    }
-
-    #[test]
-    #[cfg(feature = "serde-as-names")]
-    fn test_serialize() {
-        let subject = TestEnum::ONE_AND_THREE;
+    fn test_serde_as_number() {
+        use test_enum_serde::numeric_representation;
+        #[derive(Serialize, Deserialize)]
+        struct T {
+            #[serde(with = "numeric_representation")]
+            v: TestEnum,
+        }
+        let subject = T {
+            v: TestEnum::ONE_AND_THREE,
+        };
         assert_eq!(
             serde_json::to_string(&subject).expect("serialize"),
-            r#"["ONE","THREE","ONE_AND_THREE"]"#
+            r#"{"v":5}"#
         );
+        let subject: T = serde_json::from_str(r#"{"v": 5}"#).expect("deserialize");
+        assert!(subject.v.has_one_and_three());
     }
 
     #[test]
-    #[cfg(feature = "serde-as-names")]
-    fn test_deserialize() {
-        let subject: TestEnum = serde_json::from_str(r#"["ONE", "THREE"]"#).expect("deserialize");
-        assert!(subject.has_one_and_three());
+    fn test_serde_as_names() {
+        use test_enum_serde::names;
+        #[derive(Serialize, Deserialize)]
+        struct T {
+            #[serde(with = "names")]
+            v: TestEnum,
+        }
+        let subject = T {
+            v: TestEnum::ONE_AND_THREE,
+        };
+        assert_eq!(
+            serde_json::to_string(&subject).expect("serialize"),
+            r#"{"v":["ONE","THREE","ONE_AND_THREE"]}"#
+        );
+        let subject: T = serde_json::from_str(r#"{"v": ["ONE", "THREE"]}"#).expect("deserialize");
+        assert!(subject.v.has_one_and_three());
     }
 
     #[test]
