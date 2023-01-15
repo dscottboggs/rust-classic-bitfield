@@ -16,3 +16,4 @@ path = ".."
 [features]
 serde-as-number = ["classic-bitfield/serde-as-number"]
 serde-as-names = ["classic-bitfield/serde-as-names"]
+default = ["serde-as-names"]

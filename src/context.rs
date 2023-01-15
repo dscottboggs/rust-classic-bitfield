@@ -2,39 +2,10 @@ use core::ops::Deref;
 
 use derive_deref::Deref;
 use quote::{format_ident, quote, ToTokens};
-use syn::{parse::Parse, spanned::Spanned, Ident, ItemEnum, Token, Type};
+use syn::{parse::Parse, spanned::Spanned, Ident, ItemEnum, LitInt, Token, Type};
 
 #[derive(Deref)]
 pub(crate) struct ReprType(Type);
-
-impl ReprType {
-    #[allow(dead_code)]
-    /// TODO allow custom repr types
-    pub(crate) fn try_convert(&self, value: usize) -> impl ToTokens {
-        if let Type::Path(ref path) = self.0 {
-            match path.to_token_stream().to_string().as_str() {
-                "i8" => quote! { i8::try_from(#value) },
-                "i16" => quote! { i16::try_from(#value) },
-                "i32" => quote! { i32::try_from(#value) },
-                "i64" => quote! { i64::try_from(#value) },
-                "i128" => quote! { i128::try_from(#value) },
-                "isize" => quote! { isize::try_from(#value) },
-                "u8" => quote! { u8::try_from(#value) },
-                "u16" => quote! { u16::try_from(#value) },
-                "u32" => quote! { u32::try_from(#value) },
-                "u64" => quote! { u64::try_from(#value) },
-                "u128" => quote! { u128::try_from(#value) },
-                "usize" => quote! { usize::try_from(#value) },
-                unknown => panic!("type {unknown} is either inappropriate or not yet implemented"),
-            }
-        } else {
-            panic!(
-                "type was not of type path, it was {}",
-                self.0.to_token_stream()
-            )
-        }
-    }
-}
 
 impl Parse for ReprType {
     #[allow(unreachable_code)] // TODO remove this allow
@@ -42,7 +13,6 @@ impl Parse for ReprType {
         if input.is_empty() {
             Ok(Self(Type::Verbatim(quote! { u64 })))
         } else {
-            todo!("representing as types other than u64 is not yet implemented. Help wanted!");
             input.parse::<Token![as]>()?;
             Ok(Self(input.parse()?))
         }
@@ -63,6 +33,7 @@ impl Deref for BitfieldEnumCtx {
 
 impl BitfieldEnumCtx {
     pub(crate) fn constant_values(&self) -> Vec<impl ToTokens> {
+        let repr_type = &self.repr_type;
         self.variants
             .iter()
             .enumerate()
@@ -83,7 +54,11 @@ impl BitfieldEnumCtx {
                             }
                         })
                     })
-                    .unwrap_or(quote! { #i });
+                    .unwrap_or_else(|| {
+                        let repr_type = repr_type.to_token_stream();
+                        let n = LitInt::new(&format!("{i}{repr_type}"), name.span());
+                        quote! { #n }
+                    });
                 let type_name = &self.ident;
                 quote! {
                     const #name: #type_name = #type_name(#repr);
@@ -439,7 +414,7 @@ impl BitfieldEnumCtx {
                     let mut seq = serializer.serialize_seq(None)?;
                     #(
                         if self.#has_method() {
-                            seq.serialize_element(#variant);
+                            seq.serialize_element(#variant)?;
                         }
                     )*
                     seq.end()

@@ -1,11 +1,11 @@
 use std::{convert::Infallible, io, os::unix::process::CommandExt, process::Command};
 
-use serde::{de, ser::SerializeSeq, Serialize};
+use serde::de;
 
 #[macro_use]
 extern crate classic_bitfield;
 
-#[bitfield_enum]
+#[bitfield_enum(as u8)]
 pub(crate) enum TestEnum {
     /// first option
     ONE,
