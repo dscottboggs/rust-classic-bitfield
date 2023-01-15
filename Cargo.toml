@@ -5,6 +5,7 @@ edition = "2021"
 license = "GPL-3"
 authors = ["D. Scott Boggs <scott+cargo@tams.tech"]
 repository = "https://github.com/dscottboggs/rust-classic-bitfield"
+description = "A bitfield enum with a classic feel"
 
 [lib]
 proc-macro = true
