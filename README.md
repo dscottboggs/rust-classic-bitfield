@@ -13,7 +13,7 @@ bit-flag/bitfield value enum ergonomics with as little boilerplate as possible.
  - equality and comparison
  - A nice human-readable `fmt::Debug` implementation
  - Serialization and deserialization with serde into either a numeric
-   representation or a list of names (*next planned feature*)
+   representation or a list of names
 
 ## Installation
 Add the crate as a dependency:

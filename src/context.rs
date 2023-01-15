@@ -105,7 +105,7 @@ impl BitfieldEnumCtx {
                     variant.span(),
                 );
                 quote! {
-                    /// Check if this bitfield has the #variant_name flag set.
+                    #[doc=concat!("Check if this bitfield has the ", stringify!(#variant_name), " flag set.")]
                     fn #fn_name(self) -> bool {
                         (self & Self::#variant_name) == Self::#variant_name
                     }
@@ -305,5 +305,189 @@ impl BitfieldEnumCtx {
                 }
             }
         }
+    }
+
+    fn name_value_pairs(&self) -> (Vec<String>, Vec<impl ToTokens>) {
+        self.variants
+            .iter()
+            .map(|variant| {
+                let name = &variant.ident;
+                (name.to_string().to_uppercase(), quote! { #name })
+            })
+            .unzip()
+    }
+
+    pub(crate) fn impl_iter_variants(&self) -> impl ToTokens {
+        let (key, value) = self.name_value_pairs();
+        let type_name = &self.ident;
+        let vis = &self.vis;
+        quote! {
+            /// The name of each variant
+            #vis const fn variant_names() -> &'static [&'static str] {
+                &[
+                    #(#key),*
+                ]
+            }
+
+            /// Each value defined by a name
+            #vis const fn variant_values() -> &'static [Self] {
+                &[
+                    #(Self::#value),*
+                ]
+            }
+
+            /// The name of each variant along with the corresponding value.
+            #vis const fn variant_pairs() -> &'static [(&'static str, Self)] {
+                &[
+                    #(
+                        (#key, Self::#value)
+                    ),*
+                ]
+            }
+
+            #[doc=concat!("An instance of `", stringify!(#type_name), "` with all named variants set on")]
+            #vis fn all_set() -> Self {
+                Self(0) | #( Self::#value )|*
+            }
+
+            #[doc=concat!("The names of each variant which is set on this instance of `", stringify!(#type_name), "`")]
+            #vis fn names_of_set_variants(self) -> Vec<&'static str> {
+                let mut names = vec![];
+                #(
+                    if (self & Self::#value) == Self::#value {
+                        names.push(#key);
+                    }
+                )*
+                names
+            }
+        }
+    }
+
+    #[cfg(feature = "serde-as-number")]
+    pub(crate) fn impl_serde(&self) -> impl ToTokens {
+        let type_name = &self.ident;
+        let serialize_method = Ident::new(
+            &format!("serialize_{}", &self.repr_type.to_token_stream()),
+            syn::__private::Span::call_site(),
+        );
+        let deserialize_method = Ident::new(
+            &format!("deserialize_{}", self.repr_type.to_token_stream()),
+            syn::__private::Span::call_site(),
+        );
+        let visit_method = Ident::new(
+            &format!("visit_{}", self.repr_type.to_token_stream()),
+            syn::__private::Span::call_site(),
+        );
+        quote! {
+            impl serde::Serialize for #type_name {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: serde::Serializer,
+                {
+                    serializer.#serialize_method(self.0)
+                }
+            }
+
+            impl<'de> serde::Deserialize<'de> for #type_name {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: serde::Deserializer<'de>,
+                {
+                    struct MyVisitor;
+
+                    impl<'v> serde::de::Visitor<'v> for MyVisitor {
+                        type Value = #type_name;
+                        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                            write!(formatter, "integer")
+                        }
+
+                        fn #visit_method<E>(self, v: u64) -> Result<Self::Value, E>
+                        where
+                            E: serde::de::Error,
+                        {
+                            Ok(#type_name(v))
+                        }
+                    }
+
+                    deserializer.#deserialize_method(MyVisitor)
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "serde-as-names")]
+    pub(crate) fn impl_serde(&self) -> impl ToTokens {
+        let type_name = &self.ident;
+        let (variant, has_method): &(Vec<_>, Vec<_>) = &self
+            .variants
+            .iter()
+            .map(|vairant| {
+                let name = vairant.ident.to_string();
+                let has_method = Ident::new(&format!("has_{}", name.to_lowercase()), name.span());
+                (name, has_method)
+            })
+            .unzip();
+        let (key, value) = self.name_value_pairs();
+        quote! {
+            impl serde::Serialize for #type_name {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: serde::Serializer,
+                {
+                    use serde::ser::SerializeSeq;
+
+                    let mut seq = serializer.serialize_seq(None)?;
+                    #(
+                        if self.#has_method() {
+                            seq.serialize_element(#variant);
+                        }
+                    )*
+                    seq.end()
+                }
+            }
+
+            impl<'de> serde::Deserialize<'de> for #type_name {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: serde::Deserializer<'de>,
+                {
+                    struct MyVisitor;
+
+                    impl<'v> serde::de::Visitor<'v> for MyVisitor {
+                        type Value = #type_name;
+                        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                            write!(formatter, "a list of any of these values: {:?}", #type_name::variant_names())
+                        }
+
+                        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+                        where
+                            A: serde::de::SeqAccess<'v>,
+                        {
+                            let mut value = #type_name(0);
+
+                            while let Some(member) = seq.next_element()? {
+                                match member {
+                                    #(#key => value |= #type_name::#value),*,
+                                    unrecognized => {
+                                        return Err(de::Error::unknown_variant(
+                                            unrecognized,
+                                            #type_name::variant_names(),
+                                        ));
+                                    }
+                                }
+                            }
+
+                            Ok(value)
+                        }
+                    }
+
+                    deserializer.deserialize_seq(MyVisitor)
+                }
+            }
+        }
+    }
+    #[cfg(not(any(feature = "serde-as-number", feature = "serde-as-names")))]
+    pub(crate) fn impl_serde(&self) -> impl ToTokens {
+        quote! {}
     }
 }
