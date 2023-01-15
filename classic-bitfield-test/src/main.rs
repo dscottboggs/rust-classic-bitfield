@@ -115,6 +115,24 @@ mod tests {
         let subject: T = serde_json::from_str(r#"{"v": ["ONE", "THREE"]}"#).expect("deserialize");
         assert!(subject.v.has_one_and_three());
     }
+    #[test]
+    fn test_serde_as_stringified_number() {
+        use test_enum_serde::numeric_representation;
+        #[derive(Serialize, Deserialize)]
+        struct T {
+            #[serde(with = "numeric_representation::stringified")]
+            v: TestEnum,
+        }
+        let subject = T {
+            v: TestEnum::ONE_AND_THREE,
+        };
+        assert_eq!(
+            serde_json::to_string(&subject).expect("serialize"),
+            r#"{"v":"5"}"#
+        );
+        let subject: T = serde_json::from_str(r#"{"v": "5"}"#).expect("deserialize");
+        assert!(subject.v.has_one_and_three());
+    }
 
     #[test]
     fn test_list_names_and_values() {

@@ -486,6 +486,43 @@ impl BitfieldEnumCtx {
 
                         deserializer.#deserialize_method(MyVisitor)
                     }
+
+                    #vis mod stringified {
+                        use super::#type_name;
+
+                        #vis fn serialize<S>(value: &#type_name, serializer: S) -> Result<S::Ok, S::Error>
+                        where
+                            S: serde::Serializer,
+                        {
+                            serializer.serialize_str(&value.0.to_string())
+                        }
+
+                        #vis fn deserialize<'de, D>(deserializer: D) -> Result<#type_name, D::Error>
+                        where
+                            D: serde::Deserializer<'de>,
+                        {
+                            use serde::de::Unexpected;
+                            struct MyVisitor;
+
+                            impl<'v> serde::de::Visitor<'v> for MyVisitor {
+                                type Value = #type_name;
+
+                                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                                    write!(formatter, "integer between {} and {}", #repr_type::MIN, #repr_type::MAX)
+                                }
+
+                                fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                                    if let Ok(value) = value.parse::<#repr_type>() {
+                                        Ok(#type_name(value))
+                                    } else {
+                                        Err(serde::de::Error::invalid_value(Unexpected::Str(value), &self))
+                                    }
+                                }
+                            }
+
+                            deserializer.deserialize_str(MyVisitor)
+                        }
+                    }
                 }
 
                 #vis mod names {
