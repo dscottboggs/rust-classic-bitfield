@@ -69,6 +69,7 @@ impl BitfieldEnumCtx {
 
     /// A method like `has_x` for each variant like `X`.
     pub(crate) fn has_methods(&self) -> Vec<impl ToTokens> {
+        let vis = &self.vis;
         self.variants
             .iter()
             .map(|variant| {
@@ -81,7 +82,7 @@ impl BitfieldEnumCtx {
                 );
                 quote! {
                     #[doc=concat!("Check if this bitfield has the ", stringify!(#variant_name), " flag set.")]
-                    fn #fn_name(self) -> bool {
+                    #vis fn #fn_name(self) -> bool {
                         (self & Self::#variant_name) == Self::#variant_name
                     }
                 }
