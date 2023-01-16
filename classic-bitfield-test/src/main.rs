@@ -95,6 +95,8 @@ mod tests {
         );
         let subject: T = serde_json::from_str(r#"{"v": 5}"#).expect("deserialize");
         assert!(subject.v.has_one_and_three());
+        let subject: T = serde_json::from_str(r#"{"v": "5"}"#).expect("deserialize");
+        assert!(subject.v.has_one_and_three());
     }
 
     #[test]
@@ -131,6 +133,8 @@ mod tests {
             r#"{"v":"5"}"#
         );
         let subject: T = serde_json::from_str(r#"{"v": "5"}"#).expect("deserialize");
+        assert!(subject.v.has_one_and_three());
+        let subject: T = serde_json::from_str(r#"{"v": 5}"#).expect("deserialize");
         assert!(subject.v.has_one_and_three());
     }
 

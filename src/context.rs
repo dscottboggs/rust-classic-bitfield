@@ -350,10 +350,6 @@ impl BitfieldEnumCtx {
             &format!("serialize_{}", &self.repr_type.to_token_stream()),
             syn::__private::Span::call_site(),
         );
-        let deserialize_method = Ident::new(
-            &format!("deserialize_{}", self.repr_type.to_token_stream()),
-            syn::__private::Span::call_site(),
-        );
         let visit_method = Ident::new(
             &format!("visit_{}", self.repr_type.to_token_stream()),
             syn::__private::Span::call_site(),
@@ -483,9 +479,17 @@ impl BitfieldEnumCtx {
                                 }
                             )*
                             #(#bigint_conversion)*
+
+                            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
+                                if let Ok(value) = value.parse::<#repr_type>() {
+                                    Ok(#type_name(value))
+                                } else {
+                                    Err(serde::de::Error::invalid_value(Unexpected::Str(value), &self))
+                                }
+                            }
                         }
 
-                        deserializer.#deserialize_method(MyVisitor)
+                        deserializer.deserialize_any(MyVisitor)
                     }
 
                     #vis mod stringified {
@@ -502,26 +506,7 @@ impl BitfieldEnumCtx {
                         where
                             D: serde::Deserializer<'de>,
                         {
-                            use serde::de::Unexpected;
-                            struct MyVisitor;
-
-                            impl<'v> serde::de::Visitor<'v> for MyVisitor {
-                                type Value = #type_name;
-
-                                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                                    write!(formatter, "integer between {} and {}", #repr_type::MIN, #repr_type::MAX)
-                                }
-
-                                fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                                    if let Ok(value) = value.parse::<#repr_type>() {
-                                        Ok(#type_name(value))
-                                    } else {
-                                        Err(serde::de::Error::invalid_value(Unexpected::Str(value), &self))
-                                    }
-                                }
-                            }
-
-                            deserializer.deserialize_str(MyVisitor)
+                            super::deserialize(deserializer)
                         }
                     }
                 }
